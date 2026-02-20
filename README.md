@@ -152,13 +152,29 @@ cricket-management-system/
 └── README.md
 ```
 
-## 📦 Prerequisites
+## 🌐 Online Deployment (FREE Forever)
+
+Deploy your Cricket Management System online for **$0/month** in just 15 minutes!
+
+### Quick Start:
+📖 **[DEPLOYMENT_QUICKSTART.md](./DEPLOYMENT_QUICKSTART.md)** - 15-minute deployment guide
+
+### Detailed Guides:
+📚 **[FREE_HOSTING_GUIDE.md](./FREE_HOSTING_GUIDE.md)** - Complete free hosting guide
+📚 **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** - All deployment options
+
+**Recommended Free Stack:**
+- Frontend: Vercel (100GB bandwidth/month)
+- Backend: Render (Forever free with cold starts)
+- Database: Neon (512MB storage)
+
+## 📦 Prerequisites (Local Development)
 
 - Node.js 18+ and npm
 - PostgreSQL 14+
 - Docker & Docker Compose (optional)
 
-## 🚀 Installation
+## 🚀 Local Installation
 
 ### Method 1: Manual Setup
 
