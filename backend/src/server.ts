@@ -37,9 +37,14 @@ dotenv.config();
 
 const app: Application = express();
 const httpServer = createServer(app);
+// Get allowed origins from environment or use defaults
+const allowedOrigins = process.env.FRONTEND_URL
+  ? [process.env.FRONTEND_URL, ...process.env.FRONTEND_URL.split(',').filter(Boolean)]
+  : ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:3005', 'http://localhost:3006', 'http://localhost:3007'];
+
 const io = new Server(httpServer, {
   cors: {
-    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:3005', 'http://localhost:3006', 'http://localhost:3007'],
+    origin: allowedOrigins,
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -58,7 +63,7 @@ const PORT = process.env.PORT || 5000;
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004', 'http://localhost:3005', 'http://localhost:3006', 'http://localhost:3007'],
+  origin: allowedOrigins,
   credentials: true,
 }));
 app.use(express.json());
