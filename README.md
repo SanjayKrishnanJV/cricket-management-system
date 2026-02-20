@@ -152,7 +152,7 @@ cricket-management-system/
 └── README.md
 ```
 
-## 🌐 Online Deployment (FREE Forever)
+## 🌐 Online Deployment (Zero Cost Model)
 
 Deploy your Cricket Management System online for **$0/month** in just 15 minutes!
 
@@ -613,8 +613,10 @@ MIT License
 
 ## 👨‍💻 Author
 
-Created as a demonstration of a full-stack cricket management system.
-
+Sanjay Krishnan JV
+Email: sanjaykrishnanjv@gamil.com
+Phone: +918547858420
+Visit: sanjaykrishnanjv.com
 ## 🙏 Acknowledgments
 
 - Next.js team for the amazing framework
@@ -625,4 +627,4 @@ Created as a demonstration of a full-stack cricket management system.
 
 ---
 
-**Happy Cricket Managing! 🏏**
+**🏏**
