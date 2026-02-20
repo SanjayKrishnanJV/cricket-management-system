@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const team_controller_1 = require("../controllers/team.controller");
+const validator_1 = require("../middleware/validator");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+const controller = new team_controller_1.TeamController();
+router.post('/', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'TEAM_OWNER'), (0, validator_1.validate)(validator_1.schemas.createTeam), controller.createTeam);
+router.get('/', controller.getAllTeams);
+router.get('/:id', controller.getTeamById);
+router.get('/:id/squad', controller.getTeamSquad);
+router.put('/:id', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TEAM_OWNER'), controller.updateTeam);
+router.delete('/:id', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN'), controller.deleteTeam);
+router.post('/:id/players', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TEAM_OWNER'), controller.addPlayerToTeam);
+router.delete('/:id/players/:contractId', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TEAM_OWNER'), controller.removePlayerFromTeam);
+router.post('/:id/captain', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TEAM_OWNER'), controller.setCaptain);
+router.post('/:id/vice-captain', auth_1.authenticate, (0, auth_1.authorize)('SUPER_ADMIN', 'TEAM_OWNER'), controller.setViceCaptain);
+exports.default = router;
+//# sourceMappingURL=team.routes.js.map

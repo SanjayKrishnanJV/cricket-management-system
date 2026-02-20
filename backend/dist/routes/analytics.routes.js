@@ -1,0 +1,23 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const analytics_controller_1 = require("../controllers/analytics.controller");
+const visualization_controller_1 = require("../controllers/visualization.controller");
+const router = (0, express_1.Router)();
+const controller = new analytics_controller_1.AnalyticsController();
+const visualizationController = new visualization_controller_1.VisualizationController();
+router.get('/match/:matchId', controller.getMatchAnalytics);
+router.get('/player/:playerId', controller.getPlayerAnalytics);
+router.get('/team/:teamId', controller.getTeamAnalytics);
+router.get('/tournament/:tournamentId', controller.getTournamentAnalytics);
+router.get('/match/:matchId/manhattan', controller.getManhattanChart);
+router.get('/match/:matchId/worm', controller.getWormChart);
+router.get('/match/:matchId/partnerships', controller.getPartnershipAnalysis);
+router.get('/match/:matchId/phases', controller.getPhaseAnalysis);
+router.get('/matches/:matchId/wagon-wheel', visualizationController.getWagonWheel);
+router.get('/matches/:matchId/pitch-map', visualizationController.getPitchMap);
+router.get('/matches/:matchId/field-placements', visualizationController.getFieldPlacements);
+router.post('/matches/:matchId/field-placements', visualizationController.saveFieldPlacement);
+router.get('/matches/:matchId/3d-replay', visualizationController.get3DReplayData);
+exports.default = router;
+//# sourceMappingURL=analytics.routes.js.map

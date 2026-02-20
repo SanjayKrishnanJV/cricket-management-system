@@ -1,0 +1,26 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const broadcast_controller_1 = require("../controllers/broadcast.controller");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+router.use(auth_1.authenticate);
+router.post('/matches/:matchId/highlights', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.createVideoHighlight.bind(broadcast_controller_1.broadcastController));
+router.get('/matches/:matchId/highlights', broadcast_controller_1.broadcastController.getVideoHighlights.bind(broadcast_controller_1.broadcastController));
+router.post('/balls/:ballId/video', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.linkBallToVideo.bind(broadcast_controller_1.broadcastController));
+router.post('/matches/:matchId/highlights/auto-generate', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.autoGenerateHighlights.bind(broadcast_controller_1.broadcastController));
+router.post('/matches/:matchId/stream', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.setupLiveStream.bind(broadcast_controller_1.broadcastController));
+router.patch('/matches/:matchId/stream/status', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.updateStreamStatus.bind(broadcast_controller_1.broadcastController));
+router.get('/matches/:matchId/stream', broadcast_controller_1.broadcastController.getStreamInfo.bind(broadcast_controller_1.broadcastController));
+router.patch('/matches/:matchId/stream/analytics', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.updateStreamAnalytics.bind(broadcast_controller_1.broadcastController));
+router.post('/matches/:matchId/podcast/generate', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.generatePodcast.bind(broadcast_controller_1.broadcastController));
+router.get('/podcasts/:podcastId', broadcast_controller_1.broadcastController.getPodcastStatus.bind(broadcast_controller_1.broadcastController));
+router.post('/podcasts/:podcastId/publish', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.publishPodcast.bind(broadcast_controller_1.broadcastController));
+router.get('/matches/:matchId/podcasts', broadcast_controller_1.broadcastController.getMatchPodcasts.bind(broadcast_controller_1.broadcastController));
+router.get('/matches/:matchId/broadcaster/settings', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.getBroadcasterSettings.bind(broadcast_controller_1.broadcastController));
+router.patch('/matches/:matchId/broadcaster/settings', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.updateBroadcasterSettings.bind(broadcast_controller_1.broadcastController));
+router.get('/matches/:matchId/broadcaster/talking-points', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.getTalkingPoints.bind(broadcast_controller_1.broadcastController));
+router.post('/matches/:matchId/broadcaster/talking-points/generate', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.generateTalkingPoints.bind(broadcast_controller_1.broadcastController));
+router.post('/talking-points/:pointId/mark-used', (0, auth_1.authorize)('SUPER_ADMIN', 'TOURNAMENT_ADMIN', 'BROADCASTER'), broadcast_controller_1.broadcastController.markTalkingPointUsed.bind(broadcast_controller_1.broadcastController));
+exports.default = router;
+//# sourceMappingURL=broadcast.routes.js.map

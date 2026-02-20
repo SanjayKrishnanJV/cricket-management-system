@@ -1,0 +1,89 @@
+import express, { Application } from 'express';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
+import cors from 'cors';
+import dotenv from 'dotenv';
+import { errorHandler } from './middleware/errorHandler';
+import { setupMatchSocket } from './sockets/match.socket';
+
+// Routes
+import authRoutes from './routes/auth.routes';
+import playerRoutes from './routes/player.routes';
+import teamRoutes from './routes/team.routes';
+import tournamentRoutes from './routes/tournament.routes';
+import matchRoutes from './routes/match.routes';
+import auctionRoutes from './routes/auction.routes';
+import analyticsRoutes from './routes/analytics.routes';
+import featuresRoutes from './routes/features.routes';
+import roleRoutes from './routes/role.routes';
+import pollRoutes from './routes/poll.routes';
+import winPredictorRoutes from './routes/winPredictor.routes';
+import socialRoutes from './routes/social.routes';
+import aiRoutes from './routes/ai.routes';
+
+dotenv.config();
+
+const app: Application = express();
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004'],
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+const PORT = process.env.PORT || 5000;
+
+// Middleware
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'http://localhost:3004'],
+  credentials: true,
+}));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+
+// Health check
+app.get('/health', (_req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Cricket Management System API is running',
+    timestamp: new Date().toISOString(),
+  });
+});
+
+// API Routes
+app.use('/api/auth', authRoutes);
+app.use('/api/players', playerRoutes);
+app.use('/api/teams', teamRoutes);
+app.use('/api/tournaments', tournamentRoutes);
+app.use('/api/matches', matchRoutes);
+app.use('/api/auction', auctionRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/features', featuresRoutes);
+app.use('/api/roles', roleRoutes);
+app.use('/api/polls', pollRoutes);
+app.use('/api', winPredictorRoutes);
+app.use('/api/social', socialRoutes);
+app.use('/api/ai', aiRoutes);
+
+// Error handling
+app.use(errorHandler);
+
+// Setup Socket.IO
+setupMatchSocket(io);
+
+// Start server
+httpServer.listen(PORT, () => {
+  console.log(`
+    🏏 Cricket Management System Backend
+    =====================================
+    🚀 Server running on port ${PORT}
+    📡 Socket.IO enabled
+    🌍 Environment: ${process.env.NODE_ENV || 'development'}
+    ⏰ Started at: ${new Date().toISOString()}
+    =====================================
+  `);
+});
+
+export { app, io };

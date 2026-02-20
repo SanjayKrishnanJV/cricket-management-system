@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker ps:*)",
+      "Bash(wc:*)",
+      "Bash(npm run prisma:migrate:*)",
+      "Bash(node_modules/.bin/prisma migrate:*)",
+      "WebFetch(domain:i.pinimg.com)",
+      "Bash(npm install:*)",
+      "Bash(npm run dev:*)"
+    ]
+  }
+}

@@ -1,0 +1,2049 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  TOURNAMENT_ADMIN
+  TEAM_OWNER
+  SCORER
+  VIEWER
+}
+
+enum PlayerRole {
+  BATSMAN
+  BOWLER
+  ALL_ROUNDER
+  WICKETKEEPER
+}
+
+enum TournamentFormat {
+  T20
+  ODI
+  TEST
+}
+
+enum TournamentType {
+  LEAGUE
+  KNOCKOUT
+  LEAGUE_KNOCKOUT
+}
+
+enum MatchStatus {
+  SCHEDULED
+  LIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum InningsStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  DECLARED
+}
+
+enum WicketType {
+  BOWLED
+  CAUGHT
+  LBW
+  RUN_OUT
+  STUMPED
+  HIT_WICKET
+  CAUGHT_AND_BOWLED
+  OBSTRUCTING_FIELD
+  HIT_BALL_TWICE
+  TIMED_OUT
+  RETIRED_HURT
+}
+
+enum ExtraType {
+  WIDE
+  NO_BALL
+  BYE
+  LEG_BYE
+  PENALTY
+}
+
+enum StreamStatus {
+  OFFLINE
+  SCHEDULED
+  LIVE
+  PAUSED
+  ENDED
+  ERROR
+}
+
+enum PodcastStatus {
+  PENDING
+  GENERATING
+  READY
+  PUBLISHED
+  FAILED
+}
+
+// Administration & Management Enums
+enum DRSStatus {
+  PENDING
+  UPHELD
+  REVERSED
+  NOT_OUT_STAYS
+  OUT_GIVEN
+}
+
+enum DRSType {
+  LBW
+  CAUGHT
+  STUMPED
+  RUN_OUT
+  HIT_WICKET
+  OTHERS
+}
+
+enum ThirdUmpireDecision {
+  OUT
+  NOT_OUT
+  UMPIRES_CALL
+  INCONCLUSIVE
+}
+
+enum InjuryStatus {
+  ACTIVE
+  RECOVERED
+  ONGOING
+}
+
+enum InjurySeverity {
+  MINOR
+  MODERATE
+  SEVERE
+  CRITICAL
+}
+
+enum SubstituteType {
+  REGULAR
+  CONCUSSION
+  COVID
+}
+
+enum WeatherCondition {
+  SUNNY
+  CLOUDY
+  OVERCAST
+  LIGHT_RAIN
+  HEAVY_RAIN
+  DRIZZLE
+}
+
+enum PitchCondition {
+  GREEN
+  DRY
+  DUSTY
+  WET
+  CRACKED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ViolationType {
+  CODE_OF_CONDUCT
+  OVER_RATE
+  BALL_TAMPERING
+  DISSENT
+  DANGEROUS_PLAY
+  UNFAIR_PLAY
+  OTHER
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(VIEWER) // Legacy field for backward compatibility
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  ownedTeams  Team[]
+  tournaments Tournament[]
+  auctionBids AuctionBid[]
+  userRoles   UserRole_New[] // New multi-role relationship
+  createdPolls Poll[]
+  pollVotes    PollVote[]
+
+  // Social & Community relations
+  shareImages     ShareImage[]
+  fanClubMemberships FanClubMember[]
+  comments        MatchComment[]
+  commentReactions CommentReaction[]
+  highlights      Highlight[]
+
+  // Gamification & Engagement relations
+  profile            UserProfile?
+  leaderboardEntries LeaderboardEntry[]
+  challenges         ChallengeProgress[]
+  fantasyTeams       FantasyTeam[]
+  fantasyLeagues     FantasyLeague[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  isCustom    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles       UserRole_New[]
+  rolePermissions RolePermission[]
+
+  @@index([name])
+  @@index([isCustom])
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  category    String // e.g., "users", "teams", "matches", "tournaments"
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@index([category])
+  @@index([name])
+}
+
+model UserRole_New {
+  id        String   @id @default(uuid())
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+model RolePermission {
+  id           String   @id @default(uuid())
+  roleId       String
+  permissionId String
+  createdAt    DateTime @default(now())
+
+  role       Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@index([roleId])
+  @@index([permissionId])
+}
+
+model Player {
+  id          String     @id @default(uuid())
+  name        String
+  role        PlayerRole
+  age         Int
+  nationality String
+  imageUrl    String?
+  basePrice   Float      @default(0)
+
+  // Performance Stats
+  totalMatches       Int   @default(0)
+  totalRuns          Int   @default(0)
+  totalWickets       Int   @default(0)
+  battingAverage     Float @default(0)
+  bowlingAverage     Float @default(0)
+  strikeRate         Float @default(0)
+  economyRate        Float @default(0)
+  highestScore       Int   @default(0)
+  bestBowlingFigures String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  contracts     Contract[]
+  auctionBids   AuctionBid[]
+  battingStats  BattingPerformance[]
+  bowlingStats  BowlingPerformance[]
+  ballsBowled   Ball[]               @relation("BowlerBalls")
+  ballsFaced    Ball[]               @relation("BatsmanBalls")
+  wicketsTaken  Ball[]               @relation("WicketTakerBalls")
+  dismissals    Ball[]               @relation("DismissedPlayerBalls")
+  matchSquads   MatchSquad[]
+
+  // Social & Community relations
+  fanClub       FanClub?
+
+  // AI & Machine Learning relations
+  performancePredictions PerformancePrediction[]
+  injuryRisks            InjuryRisk[]
+
+  // Administration & Management relations
+  injuries               PlayerInjury[]
+  replacedAs             SubstitutePlayer[]     @relation("ReplacedPlayer")
+  substituteFor          SubstitutePlayer[]     @relation("SubstitutePlayer")
+  violations             CodeViolation[]
+
+  // Gamification & Engagement relations
+  achievements           PlayerAchievement[]
+  leaderboardEntries     LeaderboardEntry[]
+  challenges             ChallengeProgress[]
+  fantasyValues          FantasyPlayerValue[]
+
+  @@index([role])
+  @@index([name])
+}
+
+model Team {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  shortName      String   @unique
+  logoUrl        String?
+  primaryColor   String?
+  budget         Float    @default(10000000)
+  ownerId        String
+  captainId      String?
+  viceCaptainId  String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  owner            User                 @relation(fields: [ownerId], references: [id])
+  contracts        Contract[]
+  homeMatches      Match[]              @relation("HomeTeam")
+  awayMatches      Match[]              @relation("AwayTeam")
+  tournamentTeams  TournamentTeam[]
+  battingPerf      BattingPerformance[]
+  bowlingPerf      BowlingPerformance[]
+  teamStats        TeamStats[]
+
+  // AI & Machine Learning relations
+  teamSuggestions  TeamSuggestion[]
+
+  @@index([ownerId])
+  @@index([name])
+}
+
+model Contract {
+  id         String   @id @default(uuid())
+  playerId   String
+  teamId     String
+  amount     Float
+  startDate  DateTime
+  endDate    DateTime
+  isActive   Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  player Player @relation(fields: [playerId], references: [id])
+  team   Team   @relation(fields: [teamId], references: [id])
+
+  @@index([playerId])
+  @@index([teamId])
+  @@index([isActive])
+}
+
+model Tournament {
+  id          String           @id @default(uuid())
+  name        String
+  format      TournamentFormat
+  type        TournamentType
+  startDate   DateTime
+  endDate     DateTime
+  prizePool   Float?
+  description String?
+  adminId     String
+
+  // Tournament scheduling settings
+  numberOfTeams      Int?
+  autoScheduleMatches Boolean  @default(false)
+  matchesScheduled    Boolean  @default(false)
+  playoffFormat       String?  @default("TOP_3") // TOP_3, TOP_4, etc.
+  semiFinalsScheduled Boolean  @default(false)
+  finalScheduled      Boolean  @default(false)
+
+  // Custom tournament settings
+  oversPerMatch     Int?    @default(20)
+  powerplayOvers    Int?    @default(6)
+  maxPlayersPerTeam Int?    @default(15)
+  minPlayersPerTeam Int?    @default(11)
+  rules             String? // JSON string for custom rules
+
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  admin  User             @relation(fields: [adminId], references: [id])
+  teams  TournamentTeam[]
+  matches Match[]
+  pointsTable PointsTable[]
+
+  // Gamification & Engagement relations
+  challenges     Challenge[]
+  fantasyLeagues FantasyLeague[]
+
+  @@index([adminId])
+  @@index([startDate])
+}
+
+model TournamentTeam {
+  id           String   @id @default(uuid())
+  tournamentId String
+  teamId       String
+  createdAt    DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  team       Team       @relation(fields: [teamId], references: [id])
+
+  @@unique([tournamentId, teamId])
+  @@index([tournamentId])
+  @@index([teamId])
+}
+
+model PointsTable {
+  id           String @id @default(uuid())
+  tournamentId String
+  teamId       String
+
+  played       Int    @default(0)
+  won          Int    @default(0)
+  lost         Int    @default(0)
+  tied         Int    @default(0)
+  noResult     Int    @default(0)
+  points       Int    @default(0)
+  netRunRate   Float  @default(0)
+
+  runsScored   Int    @default(0)
+  runsConceded Int    @default(0)
+  oversPlayed  Float  @default(0)
+  oversFaced   Float  @default(0)
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+
+  @@unique([tournamentId, teamId])
+  @@index([tournamentId])
+  @@index([points, netRunRate])
+}
+
+model Match {
+  id           String      @id @default(uuid())
+  tournamentId String?
+  homeTeamId   String
+  awayTeamId   String
+  venue        String
+  matchDate    DateTime
+  status       MatchStatus @default(SCHEDULED)
+
+  // Match type for playoffs
+  matchType    String?     @default("LEAGUE") // LEAGUE, SEMI_FINAL, FINAL
+  isTBD        Boolean     @default(false)     // True if awayTeam is To Be Decided
+
+  // Quick match settings
+  isQuickMatch Boolean     @default(false)
+  customOvers  Int?
+
+  // Toss
+  tossWinnerId String?
+  tossDecision String?
+
+  // Result
+  winnerId     String?
+  winMargin    String?
+  resultText   String?
+  manOfMatch   String?
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  tournament Tournament? @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  homeTeam   Team        @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeam   Team        @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  innings    Innings[]
+  commentary  Commentary[]
+  matchAnalytics MatchAnalytics?
+  matchSquads MatchSquad[]
+  fieldPlacements FieldPlacement[]
+  polls Poll[]
+  winProbabilities WinProbability[]
+
+  // Social & Community relations
+  shareImages ShareImage[]
+  comments    MatchComment[]
+  highlights  Highlight[]
+
+  // AI & Machine Learning relations
+  predictions MatchPrediction[]
+  teamSuggestions TeamSuggestion[]
+  performancePredictions PerformancePrediction[]
+
+  // Broadcasting & Media relations
+  videoHighlights      VideoHighlight[]
+  liveStream           LiveStream?
+  podcasts             MatchPodcast[]
+  broadcasterSettings  BroadcasterSettings?
+  talkingPoints        TalkingPoint[]
+
+  // Administration & Management relations
+  drsReviews           DRSReview[]
+  injuries             PlayerInjury[]
+  substitutes          SubstitutePlayer[]
+  weatherRecords       WeatherRecord[]
+  pitchRecords         PitchRecord[]
+  dlsCalculations      DLSCalculation[]
+  refereeReport        MatchRefereeReport?
+  incidents            MatchIncident[]
+  violations           CodeViolation[]
+
+  // Gamification & Engagement relations
+  fantasyMatchPoints   FantasyMatchPoints[]
+
+  @@index([tournamentId])
+  @@index([homeTeamId])
+  @@index([awayTeamId])
+  @@index([status])
+  @@index([matchDate])
+  @@index([tournamentId, status])
+  @@index([status, matchDate])
+  @@index([tournamentId, matchDate])
+}
+
+model MatchSquad {
+  id        String   @id @default(uuid())
+  matchId   String
+  playerId  String
+  teamId    String
+  createdAt DateTime @default(now())
+
+  match  Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player Player @relation(fields: [playerId], references: [id])
+
+  @@unique([matchId, playerId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([teamId])
+}
+
+model Innings {
+  id             String         @id @default(uuid())
+  matchId        String
+  battingTeamId  String
+  bowlingTeamId  String
+  inningsNumber  Int
+  status         InningsStatus  @default(NOT_STARTED)
+  totalRuns      Int            @default(0)
+  totalWickets   Int            @default(0)
+  totalOvers     Float          @default(0)
+  extras         Int            @default(0)
+  currentStrikerId    String?   // Track current striker for session persistence
+  currentNonStrikerId String?   // Track current non-striker for session persistence
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  overs    Over[]
+  balls    Ball[]
+  battingPerformances BattingPerformance[]
+  bowlingPerformances BowlingPerformance[]
+  fieldPlacements FieldPlacement[]
+  winProbabilities WinProbability[]
+
+  // Broadcasting & Media relations
+  videoHighlights VideoHighlight[]
+
+  // Administration & Management relations (only required relations)
+  drsReviews      DRSReview[]
+  dlsCalculations DLSCalculation[]
+
+  @@index([matchId])
+  @@index([battingTeamId])
+  @@index([inningsNumber])
+  @@index([matchId, inningsNumber])
+}
+
+model Over {
+  id          String   @id @default(uuid())
+  inningsId   String
+  overNumber  Int
+  bowlerId    String
+  runsScored  Int      @default(0)
+  wickets     Int      @default(0)
+  maiden      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  innings Innings @relation(fields: [inningsId], references: [id])
+  balls   Ball[]
+
+  @@unique([inningsId, overNumber])
+  @@index([inningsId])
+  @@index([bowlerId])
+}
+
+model Ball {
+  id            String      @id @default(uuid())
+  inningsId     String
+  overId        String
+  overNumber    Int
+  ballNumber    Int
+  bowlerId      String
+  batsmanId     String
+
+  runs          Int         @default(0)
+  isWicket      Boolean     @default(false)
+  wicketType    WicketType?
+  dismissedPlayerId String?
+  wicketTakerId String?
+
+  isExtra       Boolean     @default(false)
+  extraType     ExtraType?
+  extraRuns     Int         @default(0)
+
+  // Wagon Wheel data (shot location)
+  shotAngle     Float?      // 0-360 degrees from straight (12 o'clock)
+  shotDistance  Float?      // 0-100 (normalized distance, 100 = boundary)
+  shotZone      String?     // 'cover', 'mid-wicket', 'fine-leg', etc.
+
+  // Pitch Map data (ball landing location)
+  pitchLine     String?     // 'off', 'middle', 'leg', 'wide-off', 'wide-leg'
+  pitchLength   String?     // 'yorker', 'full', 'good', 'short', 'bouncer'
+  pitchX        Float?      // -1 to 1 (leg to off)
+  pitchY        Float?      // 0 to 1 (stumps to bowler)
+
+  // 3D Replay data
+  ballSpeed     Float?      // km/h
+  ballTrajectory String?    // JSON string with trajectory points
+  shotType      String?     // 'drive', 'pull', 'cut', 'sweep', etc.
+
+  commentary    String?
+  createdAt     DateTime    @default(now())
+
+  innings        Innings @relation(fields: [inningsId], references: [id])
+  over           Over    @relation(fields: [overId], references: [id])
+  bowler         Player  @relation("BowlerBalls", fields: [bowlerId], references: [id])
+  batsman        Player  @relation("BatsmanBalls", fields: [batsmanId], references: [id])
+  dismissedPlayer Player? @relation("DismissedPlayerBalls", fields: [dismissedPlayerId], references: [id])
+  wicketTaker    Player? @relation("WicketTakerBalls", fields: [wicketTakerId], references: [id])
+
+  // Social & Community relations
+  highlights     Highlight[]
+
+  // Broadcasting & Media relations
+  videoHighlights VideoHighlight[]
+
+  // Administration & Management relations
+  drsReviews      DRSReview[]
+
+  @@index([inningsId])
+  @@index([overId])
+  @@index([bowlerId])
+  @@index([batsmanId])
+  @@index([shotAngle])
+  @@index([pitchX])
+  @@index([pitchY])
+  @@index([inningsId, overNumber, ballNumber])
+  @@index([batsmanId, runs])
+  @@index([bowlerId, isWicket])
+}
+
+model BattingPerformance {
+  id          String   @id @default(uuid())
+  inningsId   String
+  playerId    String
+  teamId      String
+  runs        Int      @default(0)
+  ballsFaced  Int      @default(0)
+  fours       Int      @default(0)
+  sixes       Int      @default(0)
+  strikeRate  Float    @default(0)
+  isOut       Boolean  @default(false)
+  dismissal   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  innings Innings @relation(fields: [inningsId], references: [id])
+  player  Player  @relation(fields: [playerId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@index([inningsId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([playerId, runs])
+  @@index([inningsId, runs])
+}
+
+model BowlingPerformance {
+  id          String   @id @default(uuid())
+  inningsId   String
+  playerId    String
+  teamId      String
+  oversBowled Float    @default(0)
+  runsConceded Int     @default(0)
+  wickets     Int      @default(0)
+  maidens     Int      @default(0)
+  economyRate Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  innings Innings @relation(fields: [inningsId], references: [id])
+  player  Player  @relation(fields: [playerId], references: [id])
+  team    Team    @relation(fields: [teamId], references: [id])
+
+  @@index([inningsId])
+  @@index([playerId])
+  @@index([teamId])
+  @@index([playerId, wickets])
+  @@index([inningsId, wickets])
+}
+
+model Commentary {
+  id        String   @id @default(uuid())
+  matchId   String
+  over      Int
+  ball      Int
+  text      String
+  timestamp DateTime @default(now())
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([timestamp])
+}
+
+model FieldPlacement {
+  id            String   @id @default(uuid())
+  matchId       String
+  inningsId     String
+  overNumber    Int
+  ballNumber    Int?     // null = for entire over
+  positions     String   // JSON array of {playerId, playerName, position, x, y}
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  match   Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  innings Innings @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([inningsId])
+  @@index([overNumber])
+}
+
+model AuctionBid {
+  id         String   @id @default(uuid())
+  playerId   String
+  bidderId   String
+  amount     Float
+  timestamp  DateTime @default(now())
+  isWinning  Boolean  @default(false)
+
+  player  Player @relation(fields: [playerId], references: [id])
+  bidder  User   @relation(fields: [bidderId], references: [id])
+
+  @@index([playerId])
+  @@index([bidderId])
+  @@index([timestamp])
+}
+
+model TeamStats {
+  id              String   @id @default(uuid())
+  teamId          String
+  totalMatches    Int      @default(0)
+  matchesWon      Int      @default(0)
+  matchesLost     Int      @default(0)
+  totalRuns       Int      @default(0)
+  totalWickets    Int      @default(0)
+  highestScore    Int      @default(0)
+  lowestScore     Int?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  team Team @relation(fields: [teamId], references: [id])
+
+  @@unique([teamId])
+  @@index([teamId])
+}
+
+model MatchAnalytics {
+  id                String   @id @default(uuid())
+  matchId           String   @unique
+
+  powerplayRuns1    Int      @default(0)
+  powerplayWickets1 Int      @default(0)
+  powerplayRuns2    Int      @default(0)
+  powerplayWickets2 Int      @default(0)
+
+  deathOversRuns1   Int      @default(0)
+  deathOversWickets1 Int     @default(0)
+  deathOversRuns2   Int      @default(0)
+  deathOversWickets2 Int     @default(0)
+
+  winProbability    String?
+  keyMoments        String?
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  match Match @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+}
+
+model Poll {
+  id            String      @id @default(uuid())
+  matchId       String
+  question      String
+  options       String      // JSON array of options
+  type          PollType    @default(GENERAL)
+  overNumber    Int?        // For over-specific polls
+  status        PollStatus  @default(ACTIVE)
+  correctAnswer String?     // For prediction contests
+  createdBy     String
+  createdAt     DateTime    @default(now())
+  expiresAt     DateTime?
+
+  match         Match       @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  creator       User        @relation(fields: [createdBy], references: [id])
+  votes         PollVote[]
+
+  @@index([matchId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PollVote {
+  id          String    @id @default(uuid())
+  pollId      String
+  userId      String
+  answer      String
+  points      Int       @default(0)   // Points awarded for correct predictions
+  votedAt     DateTime  @default(now())
+
+  poll        Poll      @relation(fields: [pollId], references: [id])
+  user        User      @relation(fields: [userId], references: [id])
+
+  @@unique([pollId, userId])  // One vote per user per poll
+  @@index([pollId])
+  @@index([userId])
+}
+
+enum PollType {
+  GENERAL           // General question
+  PREDICTION        // Prediction with points
+  MATCH_WINNER      // Who will win?
+  TOP_SCORER        // Who will score most?
+  TOP_WICKET_TAKER  // Who will take most wickets?
+  RUNS_IN_OVER      // How many runs in this over?
+  NEXT_BALL         // What will happen next ball?
+}
+
+enum PollStatus {
+  ACTIVE
+  CLOSED
+  RESOLVED
+}
+
+model WinProbability {
+  id              String   @id @default(uuid())
+  matchId         String
+  inningsId       String?
+  overNumber      Int
+  ballNumber      Int
+  team1Probability Float   // Probability of team1 winning (0-100)
+  team2Probability Float   // Probability of team2 winning (0-100)
+  tieDrawProbability Float @default(0) // Probability of tie/draw (0-100)
+
+  // Context at time of calculation
+  currentScore    Int
+  wicketsLost     Int
+  target          Int?
+  ballsRemaining  Int
+  requiredRunRate Float?
+
+  calculatedAt    DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  innings         Innings? @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([inningsId])
+  @@index([calculatedAt])
+}
+
+// ============================================
+// SOCIAL & COMMUNITY FEATURES
+// ============================================
+
+// Feature 3.1: Social Media Integration
+model ShareImage {
+  id          String   @id @default(uuid())
+  matchId     String
+  userId      String
+  type        String   // 'scorecard', 'milestone', 'summary', 'highlight'
+  title       String
+  imageUrl    String?  // If generated and saved
+  imageData   String?  // Base64 or JSON data for generation
+  platform    String?  // 'twitter', 'instagram', 'facebook', 'whatsapp'
+  shared      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([matchId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Feature 3.2: Player Fan Clubs
+model FanClub {
+  id          String   @id @default(uuid())
+  playerId    String   @unique
+  name        String
+  description String?
+  badge       String?  // Badge icon or image URL
+  memberCount Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  player      Player   @relation(fields: [playerId], references: [id])
+  members     FanClubMember[]
+
+  @@index([playerId])
+}
+
+model FanClubMember {
+  userId      String
+  fanClubId   String
+  joinedAt    DateTime @default(now())
+  points      Int      @default(0) // Leaderboard points
+  rank        Int?     // Position in leaderboard
+
+  user        User     @relation(fields: [userId], references: [id])
+  fanClub     FanClub  @relation(fields: [fanClubId], references: [id])
+
+  @@id([userId, fanClubId])
+  @@index([fanClubId])
+  @@index([points])
+}
+
+// Feature 3.3: Match Discussion Forums
+model MatchComment {
+  id          String   @id @default(uuid())
+  matchId     String
+  userId      String
+  message     String
+  isPinned    Boolean  @default(false)
+  replyToId   String?  // For threaded replies
+  karma       Int      @default(0) // Upvotes minus downvotes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  replyTo     MatchComment? @relation("CommentReplies", fields: [replyToId], references: [id], onDelete: Cascade)
+  replies     MatchComment[] @relation("CommentReplies")
+  reactions   CommentReaction[]
+
+  @@index([matchId])
+  @@index([userId])
+  @@index([createdAt])
+  @@index([isPinned])
+  @@index([matchId, createdAt])
+  @@index([matchId, isPinned, createdAt])
+}
+
+model CommentReaction {
+  id          String   @id @default(uuid())
+  commentId   String
+  userId      String
+  emoji       String   // Emoji unicode or name
+  createdAt   DateTime @default(now())
+
+  comment     MatchComment @relation(fields: [commentId], references: [id])
+  user        User     @relation(fields: [userId], references: [id])
+
+  @@unique([commentId, userId, emoji])
+  @@index([commentId])
+  @@index([userId])
+}
+
+// Feature 3.4: User-Generated Highlights
+model Highlight {
+  id          String   @id @default(uuid())
+  matchId     String
+  ballId      String?  // Optional link to specific ball
+  userId      String
+  title       String
+  description String?
+  category    String   // 'boundary', 'wicket', 'catch', 'milestone', 'other'
+  viewCount   Int      @default(0)
+  shareCount  Int      @default(0)
+  isPublic    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  match       Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  ball        Ball?    @relation(fields: [ballId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id])
+  tags        HighlightTag[]
+
+  @@index([matchId])
+  @@index([userId])
+  @@index([ballId])
+  @@index([category])
+  @@index([viewCount])
+  @@index([createdAt])
+}
+
+model HighlightTag {
+  id          String   @id @default(uuid())
+  highlightId String
+  tag         String
+
+  highlight   Highlight @relation(fields: [highlightId], references: [id])
+
+  @@index([highlightId])
+  @@index([tag])
+}
+
+// ============================================
+// AI & MACHINE LEARNING FEATURES
+// ============================================
+
+// Feature 5.1: Advanced Match Prediction
+model MatchPrediction {
+  id                String   @id @default(uuid())
+  matchId           String
+  team1WinProb      Float    // 0-100
+  team2WinProb      Float    // 0-100
+  tieDrawProb       Float    @default(0)
+
+  // Factors considered
+  team1Form         Float?   // Recent form score (0-100)
+  team2Form         Float?   // Recent form score (0-100)
+  venueAdvantage    Float?   // -1 to 1 (negative favors team2, positive favors team1)
+  tossAdvantage     Float?   // Expected advantage from winning toss
+  weatherImpact     Float?   // Impact score (-1 to 1)
+  headToHead        String?  // JSON: {team1Wins, team2Wins, draws}
+
+  // Confidence & metadata
+  confidence        Float    @default(0) // 0-100
+  modelVersion      String   @default("v1.0")
+  factors           String?  // JSON: detailed factor breakdown
+  predictedAt       DateTime @default(now())
+
+  match             Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([predictedAt])
+}
+
+// Feature 5.2: Optimal Team Selection
+model TeamSuggestion {
+  id              String   @id @default(uuid())
+  matchId         String
+  teamId          String
+  suggestedXI     String   // JSON array of player IDs (11 players)
+  substitutes     String?  // JSON array of player IDs
+
+  // Selection factors
+  pitchType       String?  // 'batting', 'bowling', 'balanced'
+  weather         String?  // 'sunny', 'overcast', 'rainy'
+  opposition      String?  // Opposition team ID
+
+  // Reasoning
+  reasoning       String?  // JSON: reasons for each selection
+  balanceScore    Float?   // Team balance score (0-100)
+  strengthScore   Float?   // Overall team strength (0-100)
+
+  createdAt       DateTime @default(now())
+  acceptedAt      DateTime?
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  team            Team     @relation(fields: [teamId], references: [id])
+
+  @@index([matchId])
+  @@index([teamId])
+}
+
+// Feature 5.3: Player Performance Prediction
+model PerformancePrediction {
+  id              String   @id @default(uuid())
+  matchId         String
+  playerId        String
+
+  // Batting predictions
+  expectedRuns    Float?   // Predicted runs
+  expectedBalls   Float?   // Predicted balls faced
+  expectedSR      Float?   // Predicted strike rate
+  boundaryProb    Float?   // Probability of scoring 4/6 (0-100)
+
+  // Bowling predictions
+  expectedWickets Float?   // Predicted wickets
+  expectedOvers   Float?   // Predicted overs bowled
+  expectedEconomy Float?   // Predicted economy rate
+  wicketProb      Float?   // Probability of taking wicket (0-100)
+
+  // Confidence
+  confidence      Float    @default(0) // 0-100
+  factors         String?  // JSON: factors considered
+  predictedAt     DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player          Player   @relation(fields: [playerId], references: [id])
+
+  @@index([matchId])
+  @@index([playerId])
+  @@index([predictedAt])
+}
+
+// Feature 5.4: Injury Risk Prediction
+model InjuryRisk {
+  id              String   @id @default(uuid())
+  playerId        String
+  riskLevel       String   // 'LOW', 'MEDIUM', 'HIGH', 'CRITICAL'
+  riskScore       Float    // 0-100
+
+  // Workload tracking
+  ballsBowled     Int      @default(0)    // Last 30 days
+  oversPerMatch   Float    @default(0)    // Average
+  matchesPlayed   Int      @default(0)    // Last 30 days
+  restDays        Int      @default(0)    // Days since last match
+
+  // Risk factors
+  age             Int?
+  injuryHistory   String?  // JSON: past injuries
+  workloadTrend   String?  // 'increasing', 'stable', 'decreasing'
+
+  // Recommendations
+  recommendation  String?  // 'rest', 'reduce_workload', 'monitor', 'safe'
+  daysToRest      Int?     // Recommended rest days
+
+  assessedAt      DateTime @default(now())
+
+  player          Player   @relation(fields: [playerId], references: [id])
+
+  @@index([playerId])
+  @@index([riskLevel])
+  @@index([assessedAt])
+}
+
+// ============================================
+// BROADCASTING & MEDIA FEATURES
+// ============================================
+
+// Feature 6.1: Video Highlight Integration
+model VideoHighlight {
+  id              String   @id @default(uuid())
+  matchId         String
+  ballId          String?
+  inningsId       String?
+
+  // Video metadata
+  videoUrl        String
+  videoProvider   String   // 'youtube', 'vimeo', 's3', 'custom'
+  videoId         String?
+  thumbnailUrl    String?
+
+  // Timestamp synchronization
+  startTimestamp  Float    // Video timestamp in seconds
+  endTimestamp    Float?
+  ballTimestamp   Float?
+
+  // Categorization
+  title           String
+  description     String?
+  category        String   // 'boundary', 'wicket', 'six', 'catch', 'milestone'
+  tags            String?  // JSON array
+
+  // Multi-camera support
+  cameraAngle     String?  // 'main', 'reverse', 'stump-cam', 'spider-cam'
+  cameraAngles    String?  // JSON: [{angle: 'main', url: '...', timestamp: 10.5}]
+
+  // Auto-generation
+  isAutoGenerated Boolean  @default(false)
+  autoGenReason   String?
+
+  viewCount       Int      @default(0)
+  shareCount      Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  ball            Ball?    @relation(fields: [ballId], references: [id])
+  innings         Innings? @relation(fields: [inningsId], references: [id])
+
+  @@index([matchId])
+  @@index([ballId])
+  @@index([category])
+}
+
+// Feature 6.2: Live Streaming Integration
+model LiveStream {
+  id              String       @id @default(uuid())
+  matchId         String       @unique
+
+  // Stream URLs (multi-bitrate)
+  streamUrl       String
+  streamType      String       @default("hls") // 'hls', 'dash', 'rtmp'
+  hlsUrl          String?
+  dashUrl         String?
+
+  // Quality levels (JSON)
+  qualityLevels   String?  // [{quality: '1080p', bitrate: 5000, url: '...'}]
+
+  // Stream provider
+  provider        String   // 'youtube-live', 'aws-ivs', 'custom'
+  providerId      String?
+  embedCode       String?
+
+  // Stream status
+  status          StreamStatus @default(OFFLINE)
+  startedAt       DateTime?
+  endedAt         DateTime?
+
+  // Synchronization
+  streamDelay     Int      @default(5) // Delay in seconds
+  lastSyncedAt    DateTime?
+
+  // Chat/interaction
+  chatEnabled     Boolean  @default(true)
+  chatUrl         String?
+
+  // Analytics
+  peakViewers     Int      @default(0)
+  totalViews      Int      @default(0)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([status])
+}
+
+// Feature 6.3: Podcast Integration
+model MatchPodcast {
+  id              String        @id @default(uuid())
+  matchId         String
+
+  // Podcast metadata
+  title           String
+  description     String?
+  episodeNumber   Int?
+  seriesName      String?
+
+  // Audio file
+  audioUrl        String
+  audioFormat     String        @default("mp3")
+  duration        Int           // Duration in seconds
+  fileSize        Int?
+
+  // Text-to-speech metadata
+  isTTS           Boolean       @default(true)
+  ttsVoice        String?       // 'male-1', 'female-1'
+  ttsProvider     String?       // 'aws-polly', 'google-tts'
+
+  // Content structure (JSON)
+  transcript      String?
+  summary         String?
+  keyMoments      String?       // JSON: [{time: 30, title: "First Wicket"}]
+  chapters        String?       // JSON: [{time: 0, title: "Introduction"}]
+
+  // Generation status
+  status          PodcastStatus @default(PENDING)
+  generatedAt     DateTime?
+  errorMessage    String?
+
+  // Publishing
+  isPublished     Boolean       @default(false)
+  publishedAt     DateTime?
+  rssGuid         String?       @unique
+
+  // Stats
+  downloadCount   Int           @default(0)
+  playCount       Int           @default(0)
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  match           Match         @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([status])
+}
+
+// Feature 6.4: Broadcaster Dashboard
+model BroadcasterSettings {
+  id              String   @id @default(uuid())
+  matchId         String   @unique
+  userId          String?
+
+  // Display preferences
+  layout          String   @default("default")
+  theme           String   @default("dark")
+  fontSize        Int      @default(16)
+
+  // Enabled panels (JSON)
+  enabledPanels   String   @default("[\"score\",\"stats\",\"talking-points\"]")
+
+  // Talking points configuration
+  autoTalkingPoints Boolean @default(true)
+  talkingPointsFreq Int     @default(5)
+
+  // Graphics export
+  graphicsFormat  String   @default("png")
+  graphicsQuality String   @default("high")
+
+  // Commercial breaks (JSON)
+  breakTimings    String?  // [{over: 6, duration: 150}]
+  nextBreakAt     Int?
+
+  // Notifications
+  notifyWicket    Boolean  @default(true)
+  notifyMilestone Boolean  @default(true)
+  notifyBreak     Boolean  @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+}
+
+model TalkingPoint {
+  id              String   @id @default(uuid())
+  matchId         String
+
+  category        String   // 'stat', 'fact', 'comparison', 'milestone'
+  priority        Int      @default(5) // 1-10
+
+  headline        String
+  description     String
+  details         String?
+
+  // Context
+  overNumber      Int?
+  playerId        String?
+  teamId          String?
+
+  // Supporting data (JSON)
+  stats           String?
+  comparison      String?
+
+  // Status
+  isUsed          Boolean  @default(false)
+  usedAt          DateTime?
+
+  // Auto-generation
+  isAutoGenerated Boolean  @default(true)
+  autoGenReason   String?
+
+  createdAt       DateTime @default(now())
+
+  match           Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([overNumber])
+  @@index([priority])
+}
+
+// ========================================
+// ADMINISTRATION & MANAGEMENT FEATURES
+// ========================================
+
+// Feature 7.1: Umpire Decision Review System (DRS)
+model DRSReview {
+  id                  String               @id @default(uuid())
+  matchId             String
+  inningsId           String
+  ballId              String?
+  overNumber          Int
+  ballNumber          Int
+
+  // Review Details
+  reviewingTeamId     String
+  battingTeamId       String
+  bowlingTeamId       String
+  batsmanId           String
+  bowlerId            String
+
+  // Decision Details
+  drsType             DRSType
+  onFieldDecision     String               // 'OUT' or 'NOT OUT'
+  reviewedBy          String               // Team captain/player who requested
+
+  // Third Umpire Details
+  thirdUmpireDecision ThirdUmpireDecision
+  finalDecision       String               // 'OUT' or 'NOT OUT'
+  status              DRSStatus
+
+  // Technology Used
+  ultraEdge           Boolean              @default(false)
+  ballTracking        Boolean              @default(false)
+  hotSpot             Boolean              @default(false)
+  snickoMeter         Boolean              @default(false)
+
+  // Evidence & Reasoning (JSON)
+  evidenceData        String?              // JSON: {ultraEdgeResult, ballTrackingData, etc}
+  reasoning           String?              // Third umpire's reasoning
+
+  // Timing
+  reviewDuration      Int?                 // Duration in seconds
+  reviewedAt          DateTime             @default(now())
+
+  // Relations
+  match               Match                @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  innings             Innings              @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+  ball                Ball?                @relation(fields: [ballId], references: [id])
+
+  @@index([matchId])
+  @@index([inningsId])
+  @@index([ballId])
+  @@index([reviewingTeamId])
+}
+
+// Feature 7.2: Injury & Substitution Management
+model PlayerInjury {
+  id                String         @id @default(uuid())
+  matchId           String
+  playerId          String
+  teamId            String
+
+  // Injury Details
+  injuryType        String         // 'Hamstring', 'Concussion', 'Finger', etc
+  severity          InjurySeverity
+  status            InjuryStatus   @default(ACTIVE)
+
+  // Occurrence Details
+  inningsId         String?
+  overNumber        Int?
+  ballNumber        Int?
+  description       String
+
+  // Medical Assessment
+  assessedBy        String?        // Physio/Doctor name
+  diagnosis         String?
+  treatmentPlan     String?
+
+  // Recovery Tracking
+  expectedRecovery  DateTime?      // Expected recovery date
+  actualRecovery    DateTime?      // Actual recovery date
+
+  // Timestamps
+  injuredAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  match             Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player            Player         @relation(fields: [playerId], references: [id])
+  substitutes       SubstitutePlayer[]
+
+  @@index([matchId])
+  @@index([playerId])
+  @@index([status])
+}
+
+model SubstitutePlayer {
+  id                  String         @id @default(uuid())
+  matchId             String
+  injuryId            String?        // Optional link to injury
+
+  // Players Involved
+  replacedPlayerId    String         // Player being replaced
+  substitutePlayerId  String         // Player coming in as substitute
+  teamId              String
+
+  // Substitution Details
+  substituteType      SubstituteType
+  reason              String
+  approvedBy          String?        // Match referee/umpire
+
+  // Timing
+  inningsId           String?
+  overNumber          Int?
+  ballNumber          Int?
+
+  // Fielding Restrictions (for concussion subs - must be like-for-like)
+  canBat              Boolean        @default(true)
+  canBowl             Boolean        @default(true)
+  canField            Boolean        @default(true)
+
+  // Timestamps
+  substitutedAt       DateTime       @default(now())
+  endedAt             DateTime?      // When substitute period ended
+
+  // Relations
+  match               Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  injury              PlayerInjury?  @relation(fields: [injuryId], references: [id])
+  replacedPlayer      Player         @relation("ReplacedPlayer", fields: [replacedPlayerId], references: [id])
+  substitutePlayer    Player         @relation("SubstitutePlayer", fields: [substitutePlayerId], references: [id])
+
+  @@index([matchId])
+  @@index([injuryId])
+  @@index([replacedPlayerId])
+}
+
+// Feature 7.3: Weather & Conditions Tracking
+model WeatherRecord {
+  id                String             @id @default(uuid())
+  matchId           String
+
+  // Weather Details
+  condition         WeatherCondition
+  temperature       Float?             // in Celsius
+  humidity          Int?               // Percentage (0-100)
+  windSpeed         Float?             // km/h
+  windDirection     String?            // N, NE, E, SE, S, SW, W, NW
+  rainfall          Float?             // mm
+  visibility        String?            // Good, Moderate, Poor
+
+  // Timing
+  inningsId         String?
+  overNumber        Int?
+  recordedAt        DateTime           @default(now())
+
+  // Impact Assessment
+  playImpact        String?            // Description of impact on play
+  dlsAffected       Boolean            @default(false)
+
+  // Relations
+  match             Match              @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([inningsId])
+  @@index([recordedAt])
+}
+
+model PitchRecord {
+  id                String         @id @default(uuid())
+  matchId           String
+
+  // Pitch Details
+  condition         PitchCondition
+  grassCover        String?        // 'Heavy', 'Moderate', 'Light', 'None'
+  hardness          Int?           // 1-10 scale
+  cracks            Boolean        @default(false)
+
+  // Performance Characteristics
+  paceAndBounce     String?        // 'High', 'Medium', 'Low'
+  turn              String?        // 'High', 'Medium', 'Low'
+  wearProgress      String?        // Description of pitch deterioration
+
+  // Assessment
+  assessedBy        String?        // Curator/Match referee name
+  favorsBatting     Boolean?
+  favorsBowling     Boolean?
+
+  // Timing
+  inningsId         String?
+  assessedAt        DateTime       @default(now())
+
+  // Relations
+  match             Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([inningsId])
+}
+
+model DLSCalculation {
+  id                String   @id @default(uuid())
+  matchId           String
+  inningsId         String
+
+  // Original Target
+  originalTarget    Int
+  originalOvers     Float
+
+  // Interruption Details
+  interruptionStart DateTime
+  interruptionEnd   DateTime?
+  oversLost         Float
+  wicketsLost       Int
+
+  // DLS Calculation
+  resourcesAvailable Float   // Percentage (0-100)
+  parScore          Int?
+  revisedTarget     Int?
+  revisedOvers      Float?
+
+  // Calculation Details
+  dlsVersion        String   @default("Standard") // 'Standard' or 'Professional'
+  calculatedBy      String?  // Match referee/scorer
+
+  // Timestamps
+  calculatedAt      DateTime @default(now())
+
+  // Relations
+  match             Match    @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  innings           Innings  @relation(fields: [inningsId], references: [id], onDelete: Cascade)
+
+  @@index([matchId])
+  @@index([inningsId])
+}
+
+// Feature 7.4: Match Referee Reports
+model MatchRefereeReport {
+  id                String         @id @default(uuid())
+  matchId           String         @unique
+
+  // Referee Details
+  refereeName       String
+  refereeId         String?        // If we have referee user accounts
+
+  // Match Summary
+  matchSummary      String         // Overall match summary
+  fairPlay          Boolean        @default(true)
+  sportsmanship     String?        // Assessment of sportsmanship
+
+  // Over Rate
+  team1OverRate     Float?         // Overs per hour
+  team2OverRate     Float?
+  overRateIssues    Boolean        @default(false)
+  overRatePenalty   String?        // Description of any penalty
+
+  // Key Observations
+  observations      String?        // General observations
+  groundConditions  String?        // Assessment of venue
+  facilitiesQuality String?        // Quality of facilities
+
+  // Official Sign-offs
+  umpire1Name       String?
+  umpire2Name       String?
+  thirdUmpireName   String?
+  matchCommissioner String?
+
+  // Status & Submission
+  status            String         @default("DRAFT") // DRAFT, SUBMITTED, APPROVED
+  submittedAt       DateTime?
+  approvedAt        DateTime?
+  approvedBy        String?
+
+  // Timestamps
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  // Relations
+  match             Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  incidents         MatchIncident[]
+  violations        CodeViolation[]
+
+  @@index([matchId])
+  @@index([status])
+}
+
+model MatchIncident {
+  id                String         @id @default(uuid())
+  reportId          String
+  matchId           String
+
+  // Incident Details
+  incidentType      String         // 'Injury', 'Delay', 'Confrontation', 'Other'
+  severity          IncidentSeverity
+  description       String
+
+  // Timing
+  inningsId         String?
+  overNumber        Int?
+  ballNumber        Int?
+
+  // Involved Parties (JSON)
+  playersInvolved   String?        // JSON array of player IDs
+  teamsInvolved     String?        // JSON array of team IDs
+
+  // Action Taken
+  actionTaken       String?
+  penaltyApplied    String?
+
+  // Evidence
+  witnessStatements String?
+  videoEvidence     Boolean        @default(false)
+
+  // Timestamps
+  occurredAt        DateTime       @default(now())
+
+  // Relations
+  report            MatchRefereeReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  match             Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@index([reportId])
+  @@index([matchId])
+  @@index([severity])
+}
+
+model CodeViolation {
+  id                String         @id @default(uuid())
+  reportId          String
+  matchId           String
+  playerId          String?
+  teamId            String?
+
+  // Violation Details
+  violationType     ViolationType
+  severity          IncidentSeverity
+  description       String
+  article           String?        // ICC Code of Conduct article number
+
+  // Timing
+  inningsId         String?
+  overNumber        Int?
+  ballNumber        Int?
+
+  // Penalty
+  penaltyPoints     Int            @default(0)
+  matchBan          Int            @default(0) // Number of matches
+  financialPenalty  Float?
+  warningIssued     Boolean        @default(false)
+
+  // Appeal
+  appealFiled       Boolean        @default(false)
+  appealOutcome     String?
+
+  // Timestamps
+  occurredAt        DateTime       @default(now())
+
+  // Relations
+  report            MatchRefereeReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  match             Match          @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  player            Player?        @relation(fields: [playerId], references: [id])
+
+  @@index([reportId])
+  @@index([matchId])
+  @@index([playerId])
+  @@index([violationType])
+}
+
+// ============================================
+// GAMIFICATION & ENGAGEMENT FEATURES
+// ============================================
+
+// Achievement System Enums
+enum AchievementCategory {
+  BATTING
+  BOWLING
+  FIELDING
+  MILESTONE
+  SPECIAL
+  STREAK
+}
+
+enum AchievementTier {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+// Leaderboard Enums
+enum LeaderboardType {
+  RUNS_ALL_TIME
+  RUNS_TOURNAMENT
+  WICKETS_ALL_TIME
+  WICKETS_TOURNAMENT
+  STRIKE_RATE
+  ECONOMY_RATE
+  FANTASY_POINTS
+}
+
+enum LeaderboardPeriod {
+  ALL_TIME
+  SEASON
+  MONTH
+  WEEK
+}
+
+// Rewards Enums
+enum RewardType {
+  XP
+  POINTS
+  BADGE
+  TITLE
+}
+
+// Challenge Enums
+enum ChallengeType {
+  DAILY
+  WEEKLY
+  MONTHLY
+  MILESTONE
+}
+
+enum ChallengeStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+}
+
+enum ChallengeTarget {
+  PLAYER
+  USER
+}
+
+// Fantasy Cricket Enums
+enum FantasyLeagueType {
+  PUBLIC
+  PRIVATE
+  HEAD_TO_HEAD
+}
+
+enum FantasyLeagueStatus {
+  DRAFT
+  ACTIVE
+  COMPLETED
+}
+
+// Feature 1: Achievement System
+model Achievement {
+  id          String              @id @default(uuid())
+  name        String              @unique
+  description String
+  category    AchievementCategory
+  tier        AchievementTier
+  iconUrl     String?
+  points      Int                 @default(0)
+  criteria    String              // JSON: {type: "century", count: 1}
+  isActive    Boolean             @default(true)
+  createdAt   DateTime            @default(now())
+
+  playerAchievements PlayerAchievement[]
+
+  @@index([category])
+  @@index([tier])
+}
+
+model PlayerAchievement {
+  id            String      @id @default(uuid())
+  playerId      String
+  achievementId String
+  matchId       String?
+  inningsId     String?
+  unlockedAt    DateTime    @default(now())
+  statValue     Int?
+  metadata      String?
+  notified      Boolean     @default(false)
+
+  player        Player      @relation(fields: [playerId], references: [id])
+  achievement   Achievement @relation(fields: [achievementId], references: [id])
+
+  @@unique([playerId, achievementId, matchId])
+  @@index([playerId])
+  @@index([achievementId])
+  @@index([unlockedAt])
+}
+
+// Feature 2: Leaderboards
+model LeaderboardEntry {
+  id             String           @id @default(uuid())
+  type           LeaderboardType
+  period         LeaderboardPeriod
+  tournamentId   String?
+  seasonYear     Int?
+  playerId       String?
+  userId         String?
+  rank           Int
+  value          Float
+  matchesPlayed  Int              @default(0)
+  metadata       String?
+  lastUpdated    DateTime         @default(now())
+
+  player         Player?          @relation(fields: [playerId], references: [id])
+  user           User?            @relation(fields: [userId], references: [id])
+
+  @@unique([type, period, tournamentId, seasonYear, playerId, userId])
+  @@index([type, period])
+  @@index([rank])
+  @@index([lastUpdated])
+}
+
+// Feature 3: Rewards & XP System
+model UserProfile {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  totalXP         Int      @default(0)
+  level           Int      @default(1)
+  xpToNextLevel   Int      @default(100)
+  totalPoints     Int      @default(0)
+  currentTitle    String?
+  unlockedTitles  String   @default("[]")
+  profileBadges   String   @default("[]")
+  loginStreak     Int      @default(0)
+  lastLoginDate   DateTime?
+  predictionStreak Int     @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions    XPTransaction[]
+
+  @@index([level])
+  @@index([totalXP])
+}
+
+model XPTransaction {
+  id            String      @id @default(uuid())
+  userProfileId String
+  type          RewardType
+  amount        Int
+  reason        String
+  matchId       String?
+  achievementId String?
+  challengeId   String?
+  createdAt     DateTime    @default(now())
+
+  userProfile   UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userProfileId])
+  @@index([createdAt])
+}
+
+// Feature 4: Challenges & Quests
+model Challenge {
+  id           String        @id @default(uuid())
+  title        String
+  description  String
+  type         ChallengeType
+  target       ChallengeTarget
+  requirements String        // JSON: {type: "runs", value: 50}
+  xpReward     Int           @default(0)
+  pointsReward Int           @default(0)
+  badgeReward  String?
+  startDate    DateTime
+  endDate      DateTime
+  isActive     Boolean       @default(true)
+  tournamentId String?
+  createdAt    DateTime      @default(now())
+
+  tournament   Tournament?   @relation(fields: [tournamentId], references: [id], onDelete: SetNull)
+  progress     ChallengeProgress[]
+
+  @@index([type])
+  @@index([isActive])
+  @@index([startDate, endDate])
+}
+
+model ChallengeProgress {
+  id           String          @id @default(uuid())
+  challengeId  String
+  playerId     String?
+  userId       String?
+  currentValue Float           @default(0)
+  targetValue  Float
+  status       ChallengeStatus @default(ACTIVE)
+  completedAt  DateTime?
+  rewardClaimed Boolean        @default(false)
+  metadata     String?
+  startedAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  challenge    Challenge       @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  player       Player?         @relation(fields: [playerId], references: [id])
+  user         User?           @relation(fields: [userId], references: [id])
+
+  @@unique([challengeId, playerId, userId])
+  @@index([status])
+  @@index([playerId])
+  @@index([userId])
+}
+
+// Feature 5: Fantasy Cricket
+model FantasyLeague {
+  id            String              @id @default(uuid())
+  name          String
+  type          FantasyLeagueType
+  status        FantasyLeagueStatus @default(DRAFT)
+  tournamentId  String
+  maxTeams      Int                 @default(10)
+  teamBudget    Float               @default(100.0)
+  maxPlayers    Int                 @default(11)
+  scoringRules  String              // JSON
+  joinCode      String?             @unique
+  createdBy     String
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+
+  tournament    Tournament          @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  creator       User                @relation(fields: [createdBy], references: [id])
+  teams         FantasyTeam[]
+
+  @@index([tournamentId])
+  @@index([status])
+}
+
+model FantasyTeam {
+  id            String        @id @default(uuid())
+  leagueId      String
+  userId        String
+  name          String
+  players       String        // JSON array of player IDs
+  captain       String?
+  viceCaptain   String?
+  budgetUsed    Float         @default(0)
+  budgetLeft    Float         @default(100)
+  totalPoints   Float         @default(0)
+  rank          Int?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  league        FantasyLeague @relation(fields: [leagueId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id])
+  matchPoints   FantasyMatchPoints[]
+
+  @@unique([leagueId, userId])
+  @@index([leagueId])
+  @@index([userId])
+  @@index([totalPoints])
+}
+
+model FantasyMatchPoints {
+  id              String       @id @default(uuid())
+  fantasyTeamId   String
+  matchId         String
+  playerPoints    String       // JSON
+  totalPoints     Float        @default(0)
+  calculatedAt    DateTime     @default(now())
+
+  fantasyTeam     FantasyTeam  @relation(fields: [fantasyTeamId], references: [id], onDelete: Cascade)
+  match           Match        @relation(fields: [matchId], references: [id])
+
+  @@unique([fantasyTeamId, matchId])
+  @@index([matchId])
+}
+
+model FantasyPlayerValue {
+  id           String   @id @default(uuid())
+  playerId     String
+  tournamentId String?
+  value        Float    @default(8.0)
+  ownership    Float    @default(0)
+  formMultiplier Float  @default(1.0)
+  updatedAt    DateTime @default(now())
+
+  player       Player   @relation(fields: [playerId], references: [id])
+
+  @@unique([playerId, tournamentId])
+  @@index([value])
+}
+

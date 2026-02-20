@@ -1,0 +1,362 @@
+import prisma from '../../config/database';
+import { AppError } from '../../middleware/errorHandler';
+
+/**
+ * Optimal Team Selection Service
+ * Feature 5.2 - AI suggests best playing XI based on conditions
+ */
+export class TeamSelectionService {
+  /**
+   * Suggest optimal playing XI for a match
+   */
+  async suggestTeam(
+    matchId: string,
+    teamId: string,
+    options?: {
+      pitchType?: 'batting' | 'bowling' | 'balanced';
+      weather?: 'sunny' | 'overcast' | 'rainy';
+      oppositionId?: string;
+    }
+  ) {
+    const match = await prisma.match.findUnique({
+      where: { id: matchId },
+      include: {
+        homeTeam: true,
+        awayTeam: true,
+      },
+    });
+
+    if (!match) {
+      throw new AppError('Match not found', 404);
+    }
+
+    // Get available players for the team
+    const contracts = await prisma.contract.findMany({
+      where: {
+        teamId,
+        isActive: true,
+      },
+      include: {
+        player: {
+          include: {
+            battingStats: {
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+            },
+            bowlingStats: {
+              orderBy: { createdAt: 'desc' },
+              take: 5,
+            },
+          },
+        },
+      },
+    });
+
+    const availablePlayers = contracts.map((c) => c.player);
+
+    // Categorize players by role
+    const batsmen = availablePlayers.filter((p) => p.role === 'BATSMAN');
+    const bowlers = availablePlayers.filter((p) => p.role === 'BOWLER');
+    const allRounders = availablePlayers.filter((p) => p.role === 'ALL_ROUNDER');
+    const wicketKeepers = availablePlayers.filter((p) => p.role === 'WICKETKEEPER');
+
+    // Select optimal XI based on conditions
+    const selectedXI = this.selectBestXI({
+      batsmen,
+      bowlers,
+      allRounders,
+      wicketKeepers,
+      pitchType: options?.pitchType || 'balanced',
+      weather: options?.weather || 'sunny',
+    });
+
+    // Select substitutes
+    const substitutes = this.selectSubstitutes(availablePlayers, selectedXI);
+
+    // Calculate team balance and strength
+    const balanceScore = this.calculateTeamBalance(selectedXI);
+    const strengthScore = this.calculateTeamStrength(selectedXI);
+
+    // Generate reasoning for selections
+    const reasoning = this.generateReasoning(selectedXI, options);
+
+    // Save suggestion
+    const suggestion = await prisma.teamSuggestion.create({
+      data: {
+        matchId,
+        teamId,
+        suggestedXI: JSON.stringify(selectedXI.map((p) => p.id)),
+        substitutes: JSON.stringify(substitutes.map((p) => p.id)),
+        pitchType: options?.pitchType,
+        weather: options?.weather,
+        opposition: options?.oppositionId,
+        reasoning: JSON.stringify(reasoning),
+        balanceScore,
+        strengthScore,
+      },
+    });
+
+    return {
+      success: true,
+      data: {
+        ...suggestion,
+        suggestedXI: selectedXI,
+        substitutes: substitutes,
+        reasoning: JSON.parse(suggestion.reasoning || '{}'),
+      },
+    };
+  }
+
+  /**
+   * Select best XI based on pitch and weather conditions
+   */
+  private selectBestXI(options: {
+    batsmen: any[];
+    bowlers: any[];
+    allRounders: any[];
+    wicketKeepers: any[];
+    pitchType: string;
+    weather: string;
+  }) {
+    const selected: any[] = [];
+
+    // Always need 1 wicket keeper
+    const keeper = this.selectBest(options.wicketKeepers, 1, 'batting')[0];
+    if (keeper) selected.push(keeper);
+
+    // Determine batting/bowling split based on pitch
+    let numBatsmen = 5;
+    let numBowlers = 4;
+    let numAllRounders = 1;
+
+    if (options.pitchType === 'batting') {
+      numBatsmen = 6;
+      numBowlers = 3;
+      numAllRounders = 1;
+    } else if (options.pitchType === 'bowling') {
+      numBatsmen = 4;
+      numBowlers = 5;
+      numAllRounders = 1;
+    }
+
+    // Select batsmen
+    const selectedBatsmen = this.selectBest(options.batsmen, numBatsmen, 'batting');
+    selected.push(...selectedBatsmen);
+
+    // Select all-rounders
+    const selectedAllRounders = this.selectBest(options.allRounders, numAllRounders, 'allRound');
+    selected.push(...selectedAllRounders);
+
+    // Select bowlers
+    const selectedBowlers = this.selectBest(options.bowlers, numBowlers, 'bowling');
+    selected.push(...selectedBowlers);
+
+    return selected.slice(0, 11); // Ensure exactly 11
+  }
+
+  /**
+   * Select best players based on recent performance
+   */
+  private selectBest(players: any[], count: number, criterion: string): any[] {
+    return players
+      .map((player) => ({
+        ...player,
+        score: this.calculatePlayerScore(player, criterion),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, count);
+  }
+
+  /**
+   * Calculate player score for selection
+   */
+  private calculatePlayerScore(player: any, criterion: string): number {
+    let score = 0;
+
+    if (criterion === 'batting' || criterion === 'allRound') {
+      score += player.battingAverage * 0.4;
+      score += player.strikeRate * 0.3;
+      score += player.totalRuns / 100; // Normalize total runs
+    }
+
+    if (criterion === 'bowling' || criterion === 'allRound') {
+      score += (40 - player.bowlingAverage) * 0.4; // Lower is better
+      score += (10 - player.economyRate) * 0.3; // Lower is better
+      score += player.totalWickets * 2;
+    }
+
+    // Recent form bonus
+    const recentForm = this.calculateRecentForm(player);
+    score += recentForm * 0.2;
+
+    return score;
+  }
+
+  /**
+   * Calculate recent form
+   */
+  private calculateRecentForm(player: any): number {
+    if (player.battingStats && player.battingStats.length > 0) {
+      const recentAvg =
+        player.battingStats.reduce((sum: number, s: any) => sum + s.runs, 0) / player.battingStats.length;
+      return recentAvg;
+    }
+
+    if (player.bowlingStats && player.bowlingStats.length > 0) {
+      const recentWickets =
+        player.bowlingStats.reduce((sum: number, s: any) => sum + s.wickets, 0) / player.bowlingStats.length;
+      return recentWickets * 10;
+    }
+
+    return 0;
+  }
+
+  /**
+   * Select substitute players
+   */
+  private selectSubstitutes(allPlayers: any[], selectedXI: any[]): any[] {
+    const selectedIds = new Set(selectedXI.map((p) => p.id));
+    const remaining = allPlayers.filter((p) => !selectedIds.has(p.id));
+
+    return remaining
+      .map((p) => ({
+        ...p,
+        score: this.calculatePlayerScore(p, 'allRound'),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 4);
+  }
+
+  /**
+   * Calculate team balance (batting/bowling mix)
+   */
+  private calculateTeamBalance(team: any[]): number {
+    const batsmen = team.filter((p) => p.role === 'BATSMAN' || p.role === 'WICKETKEEPER').length;
+    const bowlers = team.filter((p) => p.role === 'BOWLER').length;
+    const allRounders = team.filter((p) => p.role === 'ALL_ROUNDER').length;
+
+    // Ideal: 5-6 batsmen, 4-5 bowlers, 1-2 all-rounders
+    let score = 100;
+
+    if (batsmen < 4 || batsmen > 7) score -= 20;
+    if (bowlers < 3 || bowlers > 6) score -= 20;
+    if (allRounders < 1 || allRounders > 3) score -= 10;
+
+    return Math.max(0, score);
+  }
+
+  /**
+   * Calculate team strength
+   */
+  private calculateTeamStrength(team: any[]): number {
+    const avgBattingAverage = team.reduce((sum, p) => sum + p.battingAverage, 0) / team.length;
+    const avgStrikeRate = team.reduce((sum, p) => sum + p.strikeRate, 0) / team.length;
+
+    const bowlers = team.filter((p) => p.role === 'BOWLER' || p.role === 'ALL_ROUNDER');
+    const avgBowlingAverage =
+      bowlers.length > 0 ? bowlers.reduce((sum, p) => sum + p.bowlingAverage, 0) / bowlers.length : 0;
+    const avgEconomy = bowlers.length > 0 ? bowlers.reduce((sum, p) => sum + p.economyRate, 0) / bowlers.length : 0;
+
+    // Combine metrics (normalized to 100)
+    const battingStrength = Math.min(100, (avgBattingAverage / 40) * 50 + (avgStrikeRate / 150) * 50);
+    const bowlingStrength = Math.min(100, ((40 - avgBowlingAverage) / 40) * 50 + ((10 - avgEconomy) / 10) * 50);
+
+    return parseFloat(((battingStrength + bowlingStrength) / 2).toFixed(2));
+  }
+
+  /**
+   * Generate reasoning for selections
+   */
+  private generateReasoning(team: any[], options: any): any {
+    const reasoning: any = {};
+
+    team.forEach((player) => {
+      reasoning[player.id] = {
+        name: player.name,
+        role: player.role,
+        reason: this.getSelectionReason(player, options),
+      };
+    });
+
+    return reasoning;
+  }
+
+  /**
+   * Get selection reason for a player
+   */
+  private getSelectionReason(player: any, options: any): string {
+    const reasons = [];
+
+    if (player.battingAverage > 35) {
+      reasons.push('Strong batting average');
+    }
+
+    if (player.strikeRate > 130) {
+      reasons.push('High strike rate');
+    }
+
+    if (player.totalWickets > 20) {
+      reasons.push('Consistent wicket-taker');
+    }
+
+    if (player.economyRate < 7.5) {
+      reasons.push('Economical bowler');
+    }
+
+    if (player.role === 'ALL_ROUNDER') {
+      reasons.push('Provides balance');
+    }
+
+    if (options?.pitchType === 'batting' && player.role === 'BATSMAN') {
+      reasons.push('Suited for batting pitch');
+    }
+
+    if (options?.pitchType === 'bowling' && player.role === 'BOWLER') {
+      reasons.push('Effective on bowling pitch');
+    }
+
+    return reasons.join(', ') || 'Selected based on overall performance';
+  }
+
+  /**
+   * Get team suggestion
+   */
+  async getTeamSuggestion(matchId: string, teamId: string) {
+    const suggestion = await prisma.teamSuggestion.findFirst({
+      where: { matchId, teamId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        match: true,
+        team: true,
+      },
+    });
+
+    if (!suggestion) {
+      // Generate new suggestion
+      return this.suggestTeam(matchId, teamId);
+    }
+
+    // Get player details
+    const playerIds = JSON.parse(suggestion.suggestedXI);
+    const substituteIds = JSON.parse(suggestion.substitutes || '[]');
+
+    const players = await prisma.player.findMany({
+      where: { id: { in: [...playerIds, ...substituteIds] } },
+    });
+
+    const suggestedXI = playerIds.map((id: string) => players.find((p) => p.id === id));
+    const substitutes = substituteIds.map((id: string) => players.find((p) => p.id === id));
+
+    return {
+      success: true,
+      data: {
+        ...suggestion,
+        suggestedXI,
+        substitutes,
+        reasoning: JSON.parse(suggestion.reasoning || '{}'),
+      },
+    };
+  }
+}
+
+export const teamSelectionService = new TeamSelectionService();

@@ -1,0 +1,20 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const role_controller_1 = require("../controllers/role.controller");
+const auth_1 = require("../middleware/auth");
+const router = (0, express_1.Router)();
+const controller = new role_controller_1.RoleController();
+router.use(auth_1.authenticate);
+router.use((0, auth_1.authorize)('SUPER_ADMIN'));
+router.get('/permissions/all', controller.getAllPermissions);
+router.post('/assign', controller.assignRoleToUser);
+router.post('/remove', controller.removeRoleFromUser);
+router.get('/user/:userId', controller.getUserRoles);
+router.get('/', controller.getAllRoles);
+router.get('/:id', controller.getRoleById);
+router.post('/', controller.createRole);
+router.put('/:id', controller.updateRole);
+router.delete('/:id', controller.deleteRole);
+exports.default = router;
+//# sourceMappingURL=role.routes.js.map
